@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>RecLite</AssemblyName>
+    <RootNamespace>RecLite</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>RecLite 轻录音</Product>
+    <!-- 明确编译为 64 位：32 位进程访问 shell 部分接口会被 WOW64/UIPI 拒绝（E_ACCESSDENIED 0x80070005） -->
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Description>轻量绿色录音机 - 支持设备选择、预录缓存、实时波形、WAV/MP3</Description>
+    <Copyright>Open Source</Copyright>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Release 不生成 PDB：否则 exe 的 CodeView 记录里会写入构建机的绝对路径 -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <!-- exe 与窗口的图标（多尺寸 16~256，深色圆角底 + 蓝色波形） -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 同时作为 WPF 资源，供 MainWindow 的 Icon 属性引用 -->
+    <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 「更改文件夹」用的 FolderBrowserDialog 在 WinForms 里 -->
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- libsndfile（xiph 官方 win64 构建，内含 libFLAC）：文件解码用。
+         开发时复制到输出目录方便调试；同时内嵌一份（见下方 ItemGroup），供单文件发布版解包使用。 -->
+    <None Include="lib\sndfile.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>sndfile.dll</Link>
+    </None>
+  </ItemGroup>
+
+  <!--
+    单文件发布：把托管依赖和原生 sndfile.dll 都内嵌进 exe，
+    运行时由 Core\Bundled.cs 的 AssemblyResolve / 解包逻辑取出。
+    这样发布目录里就只剩一个 RecLite.exe。
+
+    这里刻意用「静态清单 + lib\bundled 目录」而不是在 Target 里动态加
+    @(ReferenceCopyLocalPaths)：实测动态加的资源不会被 CreateManifestResourceNames 采纳
+    （资源清单在 PrepareResources 阶段就已成型，挂 BeforeCompile 太晚，
+     挂 PrepareForBuild 又会和 ResolveAssemblyReferences 形成循环依赖）。
+    lib\bundled 里的 dll 只是在打包时充当资源，不参与编译引用。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="lib\bundled\*.dll">
+      <LogicalName>Bundled.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="lib\sndfile.dll">
+      <LogicalName>Bundled.sndfile.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
