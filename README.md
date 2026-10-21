@@ -1,3 +1,5 @@
+**中文** ｜ [English](README.en.md)
+
 # RecLite 轻录音
 
 一个轻量的 Windows 录音工具：**单文件、绿色免安装、自带预录缓存**。
