@@ -16,6 +16,7 @@ using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using RecLite.Audio;
 using RecLite.Core;
+using RecLite.UI;
 
 namespace RecLite
 {
@@ -51,6 +52,8 @@ namespace RecLite
         private string _lastPlayablePath;
         private int _playToken;          // 播放令牌：防止异步加载的波形串台
         private bool _savePrerollBusy;   // 「存预录」正在后台落盘，防重复点击
+
+        private TrayIcon _tray;          // 托盘图标（带 --no-tray 启动时为 null）
 
         // ---------- 下拉选项模型 ----------
         private class FormatOption
@@ -93,6 +96,11 @@ namespace RecLite
                 }
                 catch { }
             };
+
+            // 托盘：等窗口真正显示之后再放图标。
+            // 构造函数阶段 Application 的消息泵还没真正跑起来，Shell_NotifyIcon 有可能直接失败，
+            // 而它不回报失败 —— 只能靠「晚一点再放」来规避这个时机问题。
+            Loaded += (s, e) => InitTray();
 
             // 时间轴常开，贴在波形下方；dB 刻度条独立在左侧
             if (Timeline != null && Waveform != null) Timeline.Attach(Waveform);
@@ -249,6 +257,122 @@ namespace RecLite
 
         }
 
+        // ==================== 托盘 ====================
+
+        // 托盘图标是**常驻入口**：程序一启动就放进通知区，退出时才摘掉。
+        // 不做「最小化就隐藏窗口」：那会让任务栏按钮消失，而 .NET 的 NotifyIcon 又不回报
+        // 图标到底有没有画出来（这台机器上 UI 自动化连图标都找不到），等于把唯一入口赌在
+        // 一个看不见的东西上。现在最小化 = 普通最小化（任务栏按钮一直在），托盘只是多给一条路。
+        // 另外 App 里还有单实例唤起：再双击一次 RecLite.exe 也能把窗口叫回来。
+
+        private WindowState _lastNormalWindowState = WindowState.Normal;
+
+        /// <summary>把窗口叫回来（托盘双击/菜单、App 单实例唤起共用）</summary>
+        public void RestoreFromTray()
+        {
+            try
+            {
+                if (!IsVisible) Show();
+                if (WindowState == WindowState.Minimized) WindowState = _lastNormalWindowState;
+                Activate();
+                Log.Write("恢复窗口（托盘图标或第二次启动）");
+            }
+            catch (Exception ex) { Log.Error("RestoreFromTray", ex); }
+        }
+
+        /// <summary>
+        /// 装上常驻托盘图标。
+        /// 自动化脚本用 --no-tray 启动：否则托盘会多一个按钮、也会拖慢脚本启动。
+        /// </summary>
+        private void InitTray()
+        {
+            try
+            {
+                if (Array.IndexOf(Environment.GetCommandLineArgs(), "--no-tray") >= 0) return;
+
+                _tray = new TrayIcon(this, ExitFromTray);
+
+                // 等窗口画完再放图标。Show() 会用 NotifyIcon.added（NIM_ADD 的返回值）
+                // 判断是否真的登记成功，所以这里不用再靠「延后一拍猜时机」。
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (_tray != null && _tray.Show() == TrayIcon.TrayShowResult.NotRegistered)
+                        {
+                            Log.Write("托盘图标登记失败（NIM_ADD 未成功，点「缩到托盘」会被拦下）");
+                        }
+                        _tray?.SetText("RecLite 轻录音");
+                    }
+                    catch (Exception ex) { Log.Error("TrayShowDelayed", ex); }
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
+
+                // 记住最小化之前是「普通」还是「最大化」，恢复时还原成原来那样
+                StateChanged += (s, e) =>
+                {
+                    if (WindowState != WindowState.Minimized) _lastNormalWindowState = WindowState;
+                };
+
+                // 关窗退出时摘掉图标，避免留下点不动的死图标
+                Closed += (s, e) =>
+                {
+                    if (_tray != null) { _tray.Dispose(); _tray = null; }
+                };
+            }
+            catch (Exception ex) { Log.Error("InitTray", ex); }
+        }
+
+        /// <summary>
+        /// 单独按钮：「缩到托盘」。
+        /// 标题栏那个最小化按钮保持普通最小化（任务栏按钮还在），只有点这个才把窗口藏进托盘。
+        /// </summary>
+        private void TrayBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_tray == null)
+            {
+                SetStatus("托盘图标不可用，窗口保留在这里");
+                return;
+            }
+            try
+            {
+                // 一律允许隐藏 —— 按钮必须能用。
+                // 之前拿反查结果做硬性拦截，结果「图标明明在」也被拦住，等于把功能弄坏了。
+                // 万一图标真的没登记上，还有单实例唤起这条路：
+                // 再启动一次 RecLite.exe 会请求已有实例把窗口叫回来（App.xaml.cs）。
+                var st = _tray.Show();
+
+                Hide();
+                Log.Write("点「缩到托盘」隐藏窗口（图标状态=" + st + "）");
+
+                if (st == TrayIcon.TrayShowResult.NotRegistered)
+                {
+                    // 没有可靠证据证明图标在，就把找回窗口的办法直接告诉用户
+                    SetStatus("已缩到托盘；若看不到图标，再启动一次 RecLite.exe 即可把窗口叫回来");
+                }
+            }
+            catch (Exception ex) { Log.Error("TrayBtn", ex); }
+        }
+
+        /// <summary>托盘菜单的「退出」：录音中先确认，再延后一拍关闭程序</summary>
+        private void ExitFromTray()
+        {
+            try
+            {
+                if (_engine != null && _engine.IsRecording)
+                {
+                    var r = MessageBox.Show(
+                        "正在录音，退出会丢掉这一段录音。\n\n确定要退出吗？",
+                        "RecLite 轻录音", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                    if (r != MessageBoxResult.Yes) return;
+                }
+
+                // WinForms 的菜单回调跑在它自己的嵌套消息循环里，直接 Shutdown 会让菜单卡住、
+                // 进程晚退；延后一拍交给 WPF 的 Dispatcher 再关
+                Dispatcher.BeginInvoke(new Action(() => Application.Current.Shutdown()));
+            }
+            catch (Exception ex) { Log.Error("ExitFromTray", ex); }
+        }
+
         private void CleanupStaleTemp()
         {
             try
@@ -363,7 +487,6 @@ namespace RecLite
                 _engine.InputGain = (float)RecordVolGauge.Value;
 
                 // 开关
-                IncludePrerollCheck.IsChecked = !_settings.SkipPreroll;
                 IdleWaveCheck.IsChecked = !_settings.HideWaveformIdle;
                 if (Waveform != null) Waveform.UseLogScale = _settings.WaveLogScale;
                 UpdateScaleBtn();
@@ -994,13 +1117,6 @@ namespace RecLite
             _saveDebounce.Start();
         }
 
-        private void IncludePreroll_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_suspendEvents || _settings == null) return;
-            _settings.SkipPreroll = IncludePrerollCheck.IsChecked != true;
-            _settings.Save();
-        }
-
         private void IdleWave_Changed(object sender, RoutedEventArgs e)
         {
             if (_suspendEvents || _settings == null) return;
@@ -1033,8 +1149,41 @@ namespace RecLite
         private void RecordBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_processing) return;
-            if (_engine.IsRecording) StopAndProcess();
+            if (_engine.IsRecording) StopAndProcess(includePreroll: true);
             else StartRecording();
+        }
+
+        /// <summary>「丢弃」：停止录音、删掉临时文件，这次录到的内容不保存</summary>
+        private void RecordBtnDiscard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_processing) return;
+            if (!_engine.IsRecording)
+            {
+                // 设备被拔掉/中断后界面没跟上时，点一下把界面拉回待机
+                SetRecordingUi(false);
+                return;
+            }
+
+            long frames = StopRecordingInternal(silent: false);
+            var temp = _tempWav;
+            _tempWav = null;
+
+            if (!string.IsNullOrEmpty(temp)) TryDelete(temp);
+            if (Waveform != null) Waveform.Clear();   // 内容已经不要了，画面上也别留着
+
+            Log.Write(string.Format("丢弃录音: {0} 帧，临时文件已删除: {1}", frames, temp ?? "null"));
+            SetStatus("已丢弃本次录音（未保存）");
+        }
+
+        /// <summary>「停止（不含预录）」：停下来，并把文件开头那段预录裁掉再保存</summary>
+        private void RecordBtnNoPreroll_Click(object sender, RoutedEventArgs e)
+        {
+            if (_processing) return;
+            if (_engine.IsRecording) { StopAndProcess(includePreroll: false); return; }
+
+            // 设备被拔掉/中断时引擎会自己把录音状态复位，但界面收不到通知，
+            // 于是两个停止按钮会留在屏幕上。点一下就把界面拉回待机，不留死按钮。
+            SetRecordingUi(false);
         }
 
         private void StartRecording()
@@ -1062,11 +1211,12 @@ namespace RecLite
 
                 _tempWav = Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".tmp.wav");
 
-                bool includePreroll = IncludePrerollCheck.IsChecked == true;
-                Log.Write(string.Format("开始录音 -> {0} | 格式={1} | 含预录={2} | 增益={3:0.00}",
-                    _tempWav, fmt.Label, includePreroll, _engine.InputGain));
+                // 开头一律先把预录接进去：停止那一刻才有得选。
+                // 「要不要预录」由两个停止按钮决定（见 StopAndProcess）。
+                Log.Write(string.Format("开始录音 -> {0} | 格式={1} | 增益={2:0.00}",
+                    _tempWav, fmt.Label, _engine.InputGain));
 
-                _engine.StartRecording(_tempWav, "wav", fmt.Bits, fmt.Bitrate, 0, includePreroll);
+                _engine.StartRecording(_tempWav, "wav", fmt.Bits, fmt.Bitrate, 0, includePreroll: true);
 
                 // 只有在真的试听中才停止播放；否则不要碰波形，保持连续显示
                 if (_player != null) StopPlayback();
@@ -1138,13 +1288,21 @@ namespace RecLite
             catch (Exception ex) { Log.Error("Pause", ex); }
         }
 
-        private void StopAndProcess()
+        /// <summary>
+        /// 停止录音并按用户的选择保存：选「不含预录」时，先把文件开头那段预录裁掉，
+        /// 只留下从「点录音」那一刻开始的音频。
+        /// </summary>
+        /// <param name="includePreroll">false = 把文件开头那段预录裁掉再保存</param>
+        private void StopAndProcess(bool includePreroll)
         {
             var fmt = FormatCombo.SelectedItem as FormatOption ?? new FormatOption { Format = "wav", Bits = 32 };
             var rateOpt = RateCombo.SelectedItem as RateOption;
             int targetRate = rateOpt == null ? 0 : rateOpt.Rate;
 
             long frames = StopRecordingInternal(silent: false);
+            // 停止后引擎仍保留「开头写了多少帧预录」——这里取快照，后面裁剪用
+            long prerollFrames = includePreroll ? 0 : Math.Max(0, _engine.PrerollFramesInFile);
+
             var temp = _tempWav;
             _tempWav = null;
 
@@ -1157,9 +1315,13 @@ namespace RecLite
 
             long size = 0;
             try { size = new FileInfo(temp).Length; } catch { }
-            Log.Write(string.Format("停止录音: frames={0} 临时文件={1} bytes", frames, size));
+            Log.Write(string.Format("停止录音: frames={0} 临时文件={1} bytes 需裁预录={2} 帧",
+                frames, size, prerollFrames));
 
-            if (size <= 44) { TryDelete(temp); SetStatus("未录到任何音频"); return; }
+            // 引擎一帧都没写进来 = 真的没录到内容。
+            // 不用「文件 ≤ 44 字节」这种启发式：32 位浮点 WAV 的头可能更长（带 fact 块），
+            // 零帧文件能骗过 44 字节判定，最后存出一个只有头的假文件。
+            if (frames <= 0) { TryDelete(temp); SetStatus("未录到任何音频"); return; }
 
             string finalPath;
             try { finalPath = DetermineFinalPath(fmt); }
@@ -1173,40 +1335,97 @@ namespace RecLite
             int bitrate = fmt.Bitrate > 0 ? fmt.Bitrate : 192;
             int srcRate = _engine.SampleRate;
 
-            if (!needMp3 && !needResample)
+            // 快速路径：不裁预录、不转码、不重采样 —— 和以前完全一样，直接改名
+            if (prerollFrames <= 0 && !needMp3 && !needResample)
             {
                 var res = AudioSaver.Save(temp, finalPath, false, bitrate, 0, srcRate);
-                if (res.Ok) { Log.Write("已保存: " + res.FinalPath); FinishSaved(res.FinalPath, frames); }
+                if (res.Ok) { Log.Write("已保存: " + res.FinalPath); FinishSaved(res.FinalPath, frames, null); }
                 else { Log.Write("保存失败: " + res.Error); TryDelete(temp); SetStatus("保存失败：" + res.Error); }
                 return;
             }
 
             _processing = true;
             RecordBtn.IsEnabled = false;
-            SetStatus(needMp3 ? "正在编码 MP3…" : "正在转换采样率…");
+            RecordBtnNoPreroll.IsEnabled = false;
+            RecordBtnDiscard.IsEnabled = false;
+            SetStatus(prerollFrames > 0 ? "正在去掉开头的预录…" : (needMp3 ? "正在编码 MP3…" : "正在转换采样率…"));
 
             Task.Run(() =>
             {
-                var res = AudioSaver.Save(temp, finalPath, needMp3, bitrate, targetRate, srcRate);
-                Dispatcher.BeginInvoke(new Action(() =>
+                string workTemp = temp;
+                long keptFrames = frames;
+                string note = null;
+                SaveResult res = null;
+
+                try
                 {
-                    _processing = false;
-                    RecordBtn.IsEnabled = true;
-                    if (res.Ok) { Log.Write("后处理完成: " + res.FinalPath); FinishSaved(res.FinalPath, frames); }
-                    else
+                    if (prerollFrames > 0)
                     {
-                        Log.Write("后处理失败: " + res.Error);
+                        // 临时名必须仍以 .tmp.wav 结尾：CleanupStaleTemp 只扫这个模式，
+                        // 否则强杀进程后裁剪残片会永久留在用户的录音目录里。
+                        string trimmed = temp + ".trim.tmp.wav";
+                        string err;
+                        if (AudioSaver.TrimLeadingFrames(temp, trimmed, prerollFrames, out err))
+                        {
+                            TryDelete(temp);
+                            workTemp = trimmed;
+                            keptFrames = Math.Max(0, frames - prerollFrames);
+                        }
+                        else
+                        {
+                            // 裁不掉就退回「含预录保存」：绝不丢录音，也不静默糊过去
+                            TryDelete(trimmed);
+                            note = "未能去掉预录（" + err + "），已按含预录保存";
+                            Log.Write(note);
+                        }
+                    }
+
+                    res = AudioSaver.Save(workTemp, finalPath, needMp3, bitrate, targetRate, srcRate);
+                }
+                catch (Exception ex)
+                {
+                    // 下游各自都吞了异常，这里再兜一层：以后有人在 Task 里加了会抛的调用，
+                    // 也必须保证界面复位，否则 _processing 永久 true、两个录音按钮全废。
+                    Log.Error("后处理异常", ex);
+                    res = new SaveResult { Error = ex.GetType().Name + ": " + ex.Message };
+                }
+                finally
+                {
+                    var doneRes = res;
+                    var doneTemp = workTemp;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _processing = false;
+                        RecordBtn.IsEnabled = true;
+                        RecordBtnNoPreroll.IsEnabled = _engine.IsRecording;   // 未录音时它本来就是收起的
+                        RecordBtnDiscard.IsEnabled = _engine.IsRecording;
+
+                        if (doneRes != null && doneRes.Ok)
+                        {
+                            Log.Write("后处理完成: " + doneRes.FinalPath);
+                            FinishSaved(doneRes.FinalPath, keptFrames, note);
+                            return;
+                        }
+
+                        string err = doneRes == null ? "未知错误" : doneRes.Error;
+                        Log.Write("后处理失败: " + err);
                         var keep = Path.ChangeExtension(finalPath, ".wav");
+                        bool moved = false;
                         try
                         {
                             if (File.Exists(keep)) keep = UniquePath(keep);
-                            if (File.Exists(temp)) File.Move(temp, keep);
+                            if (File.Exists(doneTemp)) { File.Move(doneTemp, keep); moved = true; }
                         }
                         catch (Exception ex2) { Log.Error("保留WAV失败", ex2); }
-                        SetStatus("转换失败：" + res.Error + "（已保留 WAV）");
-                        if (File.Exists(keep)) { _lastPlayablePath = keep; PlayBtn.IsEnabled = true; }
-                    }
-                }));
+
+                        // 只有真的移过去了才能说「已保留 WAV」，否则要把原始位置告诉用户
+                        string tail;
+                        if (moved) { tail = "（已保留 WAV）"; _lastPlayablePath = keep; PlayBtn.IsEnabled = true; }
+                        else if (File.Exists(doneTemp)) tail = "（原始文件仍在：" + doneTemp + "）";
+                        else tail = "";
+                        SetStatus((note == null ? "" : note + "；") + "转换失败：" + err + tail);
+                    }));
+                }
             });
         }
 
@@ -1224,8 +1443,18 @@ namespace RecLite
             RecordBtn.Background = recording
                 ? (System.Windows.Media.Brush)FindResource("Accent")
                 : (System.Windows.Media.Brush)FindResource("Danger");
-            RecordBtnText.Text = recording ? "■ 停止并保存" : "● 开始录音";
-            RecordBtn.Width = recording ? 150 : 132;
+            RecordBtnText.Text = recording ? "■ 停止" : "● 开始录音";
+            // 这两个按钮只在录音时出现；未录音时收起、不占位
+            if (RecordBtnNoPreroll != null)
+            {
+                RecordBtnNoPreroll.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
+                RecordBtnNoPreroll.IsEnabled = recording;
+            }
+            if (RecordBtnDiscard != null)
+            {
+                RecordBtnDiscard.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
+                RecordBtnDiscard.IsEnabled = recording;
+            }
             // 录音中、或正在试听时都可用（同一个按钮兼管两边）
             PauseBtn.IsEnabled = recording || _player != null;
 
@@ -1266,14 +1495,19 @@ namespace RecLite
                 TimerText.Text = "00:00:000";
             }
             else TimerText.Text = "00:00:000";
+
+            // 缩在托盘里时，悬浮提示也能看出是不是正在录
+            if (_tray != null) _tray.SetText(recording ? "RecLite 轻录音 — 正在录音" : "RecLite 轻录音");
         }
 
-        private void FinishSaved(string path, long frames)
+        private void FinishSaved(string path, long frames, string note)
         {
             var secs = _engine.SampleRate > 0 ? frames / (double)_engine.SampleRate : 0;
             _lastPlayablePath = path;      // 录完的文件也能「再点试听」重播
             PlayBtn.IsEnabled = true;
-            SetStatus(string.Format("✓ 已保存（{0:0.0} 秒）：{1}", secs, path));
+            string msg = string.Format("✓ 已保存（{0:0.0} 秒）：{1}", secs, path);
+            if (!string.IsNullOrEmpty(note)) msg = "⚠ " + note + " — " + msg;
+            SetStatus(msg);
         }
 
         // ==================== 试听 ====================
@@ -1669,7 +1903,6 @@ namespace RecLite
             _settings.FileNamePrefix = string.IsNullOrWhiteSpace(PrefixBox.Text) ? "录音" : PrefixBox.Text.Trim();
             _settings.InputGain = RecordVolGauge.Value;
             _settings.PlaybackVolume = PlayVolGauge.Value;
-            _settings.SkipPreroll = IncludePrerollCheck.IsChecked != true;
             _settings.HideWaveformIdle = IdleWaveCheck.IsChecked != true;
 
             _settings.Save();

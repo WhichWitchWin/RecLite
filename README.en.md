@@ -43,12 +43,20 @@ It keeps the most recent stretch of audio buffered in the background. When you p
 - Sample rate: follow the device, or 44.1k / 48k / 88.2k / 96k
 - File names: automatic timestamp, or ask on stop
 - Folder: `Recordings\` next to the executable by default, changeable
+- Stop modes (chosen on the spot while recording):
+  `Stop` saves the take together with its pre-roll;
+  `Stop (no pre-roll)` keeps only the audio after you pressed record;
+  `Discard` throws this take away without saving
 
 **Display and playback**
 - Live waveform + timeline + elapsed-time indicator (white = idle / green = pre-roll buffering / yellow = recording)
 - Dual level meters (input and output) with clip indicator
 - Mouse wheel zooms the waveform (Shift+wheel zooms vertically); drag the waveform to seek during playback
 - Playback: replay the take you just recorded, or open / drag in any audio file (WAV / MP3 / FLAC / OGG / AIFF, etc.)
+
+**Tray**
+- `Minimize to tray` tucks the window into the notification area while recording keeps running; double-click the icon to bring it back, right-click for `Show window / Quit`
+- Launching `RecLite.exe` again while it is already running restores the existing window instead of starting a second copy
 
 ---
 

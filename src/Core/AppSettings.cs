@@ -52,7 +52,11 @@ namespace RecLite.Core
         /// <summary>UI 主题：dark / light</summary>
         [DataMember] public string Theme { get; set; }
 
-        /// <summary>保存时「不」把预录片段接到文件开头（false = 包含预录，默认）</summary>
+        /// <summary>
+        /// 旧版字段：曾用于「保存时包含预录片段」复选框。
+        /// 现在由「停止 / 停止（不含预录）」两个按钮当场决定，本字段不参与任何判断；
+        /// 只为兼容旧 settings.json 保留，避免读写时出现无谓差异。
+        /// </summary>
         [DataMember] public bool SkipPreroll { get; set; }
 
         /// <summary>待机（未录音、未预录）时「隐藏」波形</summary>
@@ -78,20 +82,37 @@ namespace RecLite.Core
         /// <summary>全新安装的预录缓存默认秒数（预录是本程序的核心功能，默认开）</summary>
         public const int DefaultPrerollSeconds = 15;
 
+        /// <summary>全新安装的录制音量（1.0 = 100%）</summary>
+        public const double DefaultInputGain = 1.0;
+
+        /// <summary>全新安装的试听音量（1.0 = 100%）</summary>
+        public const double DefaultPlaybackVolume = 1.0;
+
         public AppSettings()
         {
             SetDefaults();
+
+            // 构造函数只在「真正新建实例」时跑（DataContractJsonSerializer 不走构造函数），
+            // 也就是全新安装这类场合。这里字段初值都是 0，而 SetDefaults 为了尊重
+            // 「用户手动设的 0 = 想静音」不会把 0 抬成 1.0 —— 于是全新安装会变成
+            // 录制音量 0%，录出来整段是静音。所以默认音量必须在这里显式给 100%；
+            // 用户自己设的 0 走反序列化路径，不受影响。
+            InputGain = DefaultInputGain;
+            PlaybackVolume = DefaultPlaybackVolume;
         }
 
         /// <summary>
         /// 全新安装 / 配置文件缺失 / 配置文件损坏时使用的默认设置。
-        /// 预录秒数必须在这里显式给值：DataContractJsonSerializer 不走构造函数，
-        /// 反序列化得到的实例里 int 字段一律是 0，等于「预录关闭」。
+        /// 预录秒数与音量必须在这里显式给值：
+        /// ① DataContractJsonSerializer 不走构造函数，反序列化实例的 int 字段一律 0（= 预录关闭）；
+        /// ② 音量若也落到 0，等于全新安装就是静音录制，录出来的文件听不到声音。
         /// </summary>
         private static AppSettings CreateDefault()
         {
             var s = new AppSettings();
             s.PrerollSeconds = DefaultPrerollSeconds;
+            s.InputGain = DefaultInputGain;
+            s.PlaybackVolume = DefaultPlaybackVolume;
             return s;
         }
 

@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>RecLite</AssemblyName>
     <RootNamespace>RecLite</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>RecLite 轻录音</Product>
     <!-- 明确编译为 64 位：32 位进程访问 shell 部分接口会被 WOW64/UIPI 拒绝（E_ACCESSDENIED 0x80070005） -->
     <PlatformTarget>x64</PlatformTarget>
@@ -26,6 +26,16 @@
   <ItemGroup>
     <!-- 同时作为 WPF 资源，供 MainWindow 的 Icon 属性引用 -->
     <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- backups\ 是改动前的源码快照，不是源码：SDK 默认会把所有 .cs 通配进编译，
+         不排除的话会把旧版本再编一遍，报一堆「类型重复定义」。 -->
+    <Compile Remove="backups\**\*.cs" />
+    <Page Remove="backups\**\*.xaml" />
+    <None Remove="backups\**\*" />
+    <Resource Remove="backups\**\*" />
+    <EmbeddedResource Remove="backups\**\*" />
   </ItemGroup>
 
   <ItemGroup>

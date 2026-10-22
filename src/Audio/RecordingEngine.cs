@@ -54,6 +54,15 @@ namespace RecLite.Audio
         private double _prerollSnapshot;
 
         /// <summary>
+        /// 本次录音文件开头实际写进了多少帧预录（0 = 没写）。
+        ///
+        /// 「停止时选不含预录」要靠它知道从哪一帧开始裁。
+        /// 停止后**不清零** —— 保存动作发生在停止之后，清掉就没法裁了；
+        /// 下次开始录音或关闭设备时重置。
+        /// </summary>
+        private long _prerollFramesInFile;
+
+        /// <summary>
         /// 当前预录时长（秒）。
         /// 录制中返回开始那一刻冻结的快照 —— 否则缓存已倒空，绿条会瞬间消失。
         /// </summary>
@@ -67,6 +76,15 @@ namespace RecLite.Audio
                     return _preroll == null ? 0 : _preroll.BufferedSeconds(_sampleRate);
                 }
             }
+        }
+
+        /// <summary>
+        /// 本次录音文件开头写进了多少帧预录（0 = 没写预录）。
+        /// 停止后仍然可读，供「停止（不含预录）」裁剪用。
+        /// </summary>
+        public long PrerollFramesInFile
+        {
+            get { lock (_sync) { return _prerollFramesInFile; } }
         }
 
         /// <summary>
@@ -312,6 +330,7 @@ namespace RecLite.Audio
             CloseCaptureOnly();
             _preroll = null;
             _prerollSnapshot = 0;
+            _prerollFramesInFile = 0;
         }
 
         /// <summary>
@@ -363,6 +382,9 @@ namespace RecLite.Audio
 
                 bool usePre = includePreroll && _preroll != null;
 
+                // 本次录音开头到底写了多少预录，重置成 0；下面真写进去时再记下实际帧数
+                _prerollFramesInFile = 0;
+
                 // 先冻结「点击那一刻缓存里有多少秒」——DrainAll 之后缓存立刻变空，
                 // 时间轴只能靠这个快照继续画绿条。
                 _prerollSnapshot = usePre
@@ -381,6 +403,7 @@ namespace RecLite.Audio
                         {
                             ApplyGain(floats, preFrames);
                             _sink.Write(floats, preFrames);
+                            _prerollFramesInFile = preFrames;   // 供「停止（不含预录）」裁剪
                         }
                     }
                 }

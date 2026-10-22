@@ -326,10 +326,6 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="4" VerticalAlignment="Center">
-                    <CheckBox x:Name="IncludePrerollCheck" Content="保存时包含预录片段"
-                              Margin="0,0,0,6"
-                              Checked="IncludePreroll_Changed" Unchecked="IncludePreroll_Changed"
-                              ToolTip="取消勾选：即使开了预录，保存时也不把点录音之前那段加进去"/>
                     <CheckBox x:Name="IdleWaveCheck" Content="待机也显示波形"
                               Checked="IdleWave_Changed" Unchecked="IdleWave_Changed"
                               ToolTip="取消勾选：不录音时波形区保持静止"/>
@@ -404,6 +400,8 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -429,7 +427,55 @@
                 <TextBlock x:Name="RecordBtnText" Text="● 开始录音" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
             </Button>
 
-            <Button x:Name="PauseBtn" Grid.Column="1" Width="104" Height="46" Margin="10,0,0,0"
+            <!-- 录音中才出现：停止，并且不保存点录音之前的那段预录 -->
+            <Button x:Name="RecordBtnNoPreroll" Grid.Column="1" Width="140" Height="46" Margin="10,0,0,0"
+                    Click="RecordBtnNoPreroll_Click" Visibility="Collapsed"
+                    Background="#4A2B33" Foreground="#FFD9DE" BorderThickness="0"
+                    FontSize="14" FontWeight="SemiBold" Cursor="Hand"
+                    ToolTip="停止，并从文件开头去掉点录音之前的那段预录">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                <TextBlock Text="■ 停止（不含预录）" Foreground="#FFD9DE" FontSize="14" FontWeight="SemiBold"/>
+            </Button>
+
+            <!-- 录音中才出现：直接结束，不保存这次录的内容（临时文件当场删掉） -->
+            <Button x:Name="RecordBtnDiscard" Grid.Column="2" Width="72" Height="46" Margin="10,0,0,0"
+                    Click="RecordBtnDiscard_Click" Visibility="Collapsed"
+                    Background="#3A3A48" Foreground="#C9C9DA" BorderThickness="0"
+                    FontSize="14" FontWeight="SemiBold" Cursor="Hand"
+                    ToolTip="直接结束，并且丢弃这次录到的内容（不保存、不可恢复）">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                <TextBlock Text="■ 丢弃" Foreground="#C9C9DA" FontSize="14" FontWeight="SemiBold"/>
+            </Button>
+
+            <Button x:Name="PauseBtn" Grid.Column="3" Width="104" Height="46" Margin="10,0,0,0"
                     Click="PauseBtn_Click" IsEnabled="False"
                     Background="#2C2C38" Foreground="#E9E9F2" BorderThickness="0"
                     FontSize="14" Cursor="Hand">
@@ -451,7 +497,7 @@
                 <TextBlock x:Name="PauseBtnText" Text="⏸ 暂停" Foreground="#E9E9F2" FontSize="14"/>
             </Button>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                 <Button x:Name="PlayBtn" Width="96" Height="46"
                         Click="PlayBtn_Click" IsEnabled="False"
                         Background="#2C2C38" Foreground="#E9E9F2" BorderThickness="0"
@@ -496,11 +542,32 @@
                 </Button>
             </StackPanel>
 
-            <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="18,0">
+            <StackPanel Grid.Column="5" VerticalAlignment="Center" Margin="18,0">
                 <TextBlock x:Name="StatusText" Text="就绪" FontSize="14"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             </StackPanel>
+
+            <!-- 单独入口：只有点这里才缩到托盘；标题栏的最小化按钮是普通最小化 -->
+            <Button x:Name="TrayBtn" Grid.Column="6" Width="78" Height="46" Margin="8,0,0,0"
+                    Click="TrayBtn_Click"
+                    Background="#2C2C38" Foreground="#9A9AB0" BorderThickness="0"
+                    FontSize="12" Cursor="Hand"
+                    ToolTip="把程序缩到任务栏右下角的托盘（标题栏的最小化按钮仍是普通最小化）">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                <TextBlock Text="缩到托盘" Foreground="#9A9AB0" FontSize="12"/>
+            </Button>
         </Grid>
 
         <!-- 拖放提示遮罩：文件拖进窗口时盖住整个界面 -->
