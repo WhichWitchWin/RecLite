@@ -51,7 +51,7 @@ jobs:
         run: ./scripts/verify/verify-trim-bits.ps1 -Exe src/bin/Release/RecLite.exe
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RecLite-exe
           path: src/bin/Release/RecLite.exe
