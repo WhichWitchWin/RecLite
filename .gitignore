@@ -1,6 +1,8 @@
 # 构建产物
 [Bb]in/
 [Oo]bj/
+out/
+dist/
 *.user
 *.suo
 .vs/
@@ -11,9 +13,7 @@ settings.json
 *.log
 *.log.*
 
-# 本地专用目录（不上传）
-# local/ 里放：local\dist（本地测试构建输出）、local\dev（冒烟脚本与产物）、
-#              local\backups（改动前备份快照）
+# 本地专用目录（不上传）：放临时调试产物、个人备份快照
 local/
 
 # 保险：万一根目录出现 backups\ 也不入库
