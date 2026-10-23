@@ -128,7 +128,16 @@ namespace RecLite.Audio
                     reader.Position = skipBytes;   // WaveFileReader.Position 相对数据段起点
                     using (var writer = new WaveFileWriter(dst, fmt))
                     {
-                        var buf = new byte[64 * 1024];
+                        // 缓冲区必须按 BlockAlign 对齐：WaveFileReader.Read 要求整块读取，
+                        // 请求的字节数不是块长整数倍就直接抛 ArgumentException。
+                        // 64KB 是 16 bit(4) / 32 bit(8) 的公倍数，却除不尽 24 bit 立体声的 6 ——
+                        // 那样「停止（不含预录）」在 24 bit 下必然失败，只能退回含预录保存。
+                        int blockAlign = fmt.BlockAlign;
+                        if (blockAlign <= 0) blockAlign = 1;
+                        int bufSize = (64 * 1024 / blockAlign) * blockAlign;
+                        if (bufSize < blockAlign) bufSize = blockAlign;
+
+                        var buf = new byte[bufSize];
                         int n;
                         while ((n = reader.Read(buf, 0, buf.Length)) > 0)
                             writer.Write(buf, 0, n);
