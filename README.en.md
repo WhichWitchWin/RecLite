@@ -160,6 +160,8 @@ This project is released under the [MIT License](LICENSE).
 Third-party components carry their own licenses: NAudio is MIT, libsndfile is LGPL-2.1
 (full texts in [`licenses/`](licenses/), compliance notes in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
 
+The application icon `src/app.ico` was drawn by the project author and is released under the same MIT license.
+
 See [CHANGELOG.md](CHANGELOG.md) for what changed between versions. Contributions are welcome — see
 [CONTRIBUTING.md](CONTRIBUTING.md). For security issues, follow [SECURITY.md](SECURITY.md) instead of
 opening a public issue.

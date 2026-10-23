@@ -161,4 +161,6 @@ out/                 本地构建产物（不入库）
 第三方组件另有各自许可证：NAudio 为 MIT，libsndfile 为 LGPL-2.1
 （全文在 [`licenses/`](licenses/)，合规说明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。
 
+程序图标 `src/app.ico` 由本项目作者绘制，随本仓库以同一 MIT 许可证发布。
+
 版本变化见 [CHANGELOG.md](CHANGELOG.md)。想参与改进见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私密报告，不要开公开 Issue。
