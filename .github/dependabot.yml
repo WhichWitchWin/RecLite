@@ -7,3 +7,12 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+
+  # 只做版本提醒，不自动合并：NAudio 升级要同步更新 src/lib/bundled 里内嵌的 dll
+  - package-ecosystem: nuget
+    directory: /src
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore"

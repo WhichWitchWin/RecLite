@@ -1,6 +1,9 @@
 # 统一换行符处理：仓库里按 LF 存，检出时按平台
 * text=auto
 
+# Windows 批处理必须是 CRLF，LF 结尾的 .cmd 遇到 goto/标签构造会出错
+*.cmd text eol=crlf
+
 # 二进制文件，禁止任何换行符转换
 *.dll binary
 *.exe binary

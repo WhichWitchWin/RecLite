@@ -46,6 +46,10 @@ jobs:
           }
           Write-Host ("内嵌资源 {0} 项，含 sndfile.dll 与 NAudio.dll" -f $res.Count)
 
+      - name: 裁剪预录矩阵回归（不需要声卡）
+        shell: pwsh
+        run: ./scripts/verify/verify-trim-bits.ps1 -Exe src/bin/Release/RecLite.exe
+
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:

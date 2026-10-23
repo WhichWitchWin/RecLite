@@ -5,10 +5,17 @@
 # 必须保存为 UTF-8 with BOM。
 
 param(
-    [string]$Exe = 'C:\Users\121\Desktop\DSH-Workspace\RecLite工作区\localdev\out\RecLite.exe'
+    [string]$Exe
 )
 
 $ErrorActionPreference = 'Stop'
+
+# 本脚本位于 scripts\verify\：往上两级就是仓库根
+$verify     = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptsDir = Split-Path -Parent $verify
+$root       = Split-Path -Parent $scriptsDir
+if (-not $Exe) { $Exe = Join-Path $root 'out\RecLite.exe' }
+if (-not (Test-Path $Exe)) { throw "没找到产物：$Exe（先跑一次 scripts\build.ps1）" }
 
 # ---- C# 侧：强类型调用，避免 PowerShell 把参数包成 PSObject ----
 Add-Type -TypeDefinition @'
@@ -49,7 +56,7 @@ public static class TrimRunner
 '@ | Out-Null
 
 # 载入 NAudio（供生成/校验 WAV 用）
-$bundled = 'C:\Users\121\Desktop\DSH-Workspace\RecLite工作区\localdev\src\lib\bundled'
+$bundled = Join-Path $root 'src\lib\bundled'
 foreach ($d in 'NAudio.Core.dll','NAudio.dll','NAudio.Wasapi.dll','NAudio.WinMM.dll') {
     $p = Join-Path $bundled $d
     if (Test-Path $p) { try { [Reflection.Assembly]::LoadFrom($p) | Out-Null } catch {} }

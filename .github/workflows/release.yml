@@ -1,7 +1,9 @@
 name: Release
 
-# 推一个 v* 标签即自动：编译 → 组附件 → 建 Release
-# 手动补发：在 Actions 页面点 Run workflow，填版本号（不带 v）
+# 推一个 v* 标签即自动：编译 → 组附件 → 建草稿 → 校验附件与哈希 → 转正
+# 手动补发：Actions 页面点 Run workflow，填版本号（不带 v）
+#
+# 发布分两阶段（草稿 → 校验 → 转正），任何一步失败都不会留下「对外可见但缺附件」的半成品。
 
 on:
   push:
@@ -16,10 +18,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: 构建并发布
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -29,18 +36,35 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: 解析版本号
+      # 版本号经环境变量传入，不直接插值进脚本：refname 允许 ' ; $() 等字符，
+      # 表达式插值会把它们变成脚本的一部分。
+      - name: 解析版本号并与 csproj 对齐
         id: ver
         shell: pwsh
+        env:
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
         run: |
-          $raw = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ github.event.inputs.version }}' } else { '${{ github.ref_name }}' }
-          $v = $raw.Trim() -replace '^v', ''
-          if ($v -notmatch '^\d+\.\d+\.\d+') { Write-Host "::error::版本号格式不对：$raw"; exit 1 }
+          $v = "$env:RAW_VERSION".Trim() -replace '^v', ''
+          if ($v -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            Write-Host "::error::版本号格式不对：$env:RAW_VERSION"
+            exit 1
+          }
+
+          $csproj = [xml](Get-Content src/RecLite.csproj -Raw)
+          $declared = ($csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
+          if ($declared -ne $v) {
+            Write-Host "::error::src/RecLite.csproj 里 Version=$declared，与本次版本 $v 不一致；请先升版本号再打 tag"
+            exit 1
+          }
+
           "version=$v" >> $env:GITHUB_OUTPUT
-          Write-Host "版本：$v"
+          Write-Host "版本：$v（与 csproj 一致）"
 
       - name: 编译
-        run: dotnet build src/RecLite.csproj -c Release --nologo -p:Version=${{ steps.ver.outputs.version }}
+        shell: pwsh
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: dotnet build src/RecLite.csproj -c Release --nologo -p:Version=$env:VER
 
       - name: 组附件与校验值
         shell: pwsh
@@ -57,19 +81,68 @@ jobs:
 
       - name: 生成发布说明
         shell: pwsh
-        run: ./scripts/release-notes.ps1 -Version ${{ steps.ver.outputs.version }} -OutFile release-notes.md
+        env:
+          VER: ${{ steps.ver.outputs.version }}
+        run: ./scripts/release-notes.ps1 -Version $env:VER -OutFile release-notes.md
 
-      - name: 发布
+      - name: 发布（草稿 → 校验 → 转正）
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.ver.outputs.version }}
+          TARGET_SHA: ${{ github.sha }}
         run: |
-          $tag = 'v${{ steps.ver.outputs.version }}'
-          $title = 'RecLite v${{ steps.ver.outputs.version }}'
-          $exists = gh release view $tag 2>$null
-          if ($LASTEXITCODE -eq 0 -and $exists) {
-            gh release upload $tag dist/RecLite.exe dist/RecLite-UserGuide-zh.txt dist/SHA256SUMS.txt --clobber
-            gh release edit $tag --title $title --notes-file release-notes.md
-          } else {
-            gh release create $tag dist/RecLite.exe dist/RecLite-UserGuide-zh.txt dist/SHA256SUMS.txt --title $title --notes-file release-notes.md
+          $ErrorActionPreference = 'Stop'
+
+          # 原生命令的退出码不会被 $ErrorActionPreference 捕获，逐个显式检查
+          function Invoke-Gh([string[]]$GhArgs) {
+            & gh @GhArgs
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::gh $($GhArgs -join ' ') 失败（退出码 $LASTEXITCODE）"
+              exit $LASTEXITCODE
+            }
           }
+
+          $tag    = "v$env:VER"
+          $title  = "RecLite v$env:VER"
+          $assets = @('dist/RecLite.exe', 'dist/RecLite-UserGuide-zh.txt', 'dist/SHA256SUMS.txt')
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag 已存在，覆盖附件"
+            Invoke-Gh (@('release', 'upload', $tag) + $assets + @('--clobber'))
+          } else {
+            # 草稿模式：附件没备齐之前对外不可见；--target 让 tag 指向本次构建的 commit
+            Write-Host "创建草稿 Release $tag（target=$env:TARGET_SHA）"
+            Invoke-Gh (@('release', 'create', $tag) + $assets + @('--draft', '--target', $env:TARGET_SHA, '--title', $title, '--notes-file', 'release-notes.md'))
+          }
+
+          Invoke-Gh @('release', 'edit', $tag, '--title', $title, '--notes-file', 'release-notes.md')
+
+          # 断言一：附件齐全
+          $meta  = & gh release view $tag --json assets | ConvertFrom-Json
+          $names = @($meta.assets.name)
+          foreach ($need in @('RecLite.exe', 'RecLite-UserGuide-zh.txt', 'SHA256SUMS.txt')) {
+            if ($names -notcontains $need) {
+              Write-Host "::error::Release $tag 缺少附件 $need（已有：$($names -join ', ')）"
+              exit 1
+            }
+          }
+          Write-Host "附件齐全：$($names -join ', ')"
+
+          # 断言二：发布出去的 exe 与本次构建的哈希一致，排除「传上去的是旧文件」
+          $dl = Join-Path $env:RUNNER_TEMP 'verify-release'
+          New-Item -ItemType Directory -Force -Path $dl | Out-Null
+          Invoke-Gh @('release', 'download', $tag, '--pattern', 'RecLite.exe', '--dir', $dl, '--clobber')
+          $wantLine = Get-Content dist/SHA256SUMS.txt | Where-Object { $_ -match '\bRecLite\.exe$' }
+          $want = ($wantLine -split '\s+')[0]
+          $got  = (Get-FileHash (Join-Path $dl 'RecLite.exe') -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $want) {
+            Write-Host "::error::发布件哈希与本次构建不一致：发布 $got / 期望 $want"
+            exit 1
+          }
+          Write-Host "哈希校验通过：$got"
+
+          # 全部通过才把草稿转正
+          Invoke-Gh @('release', 'edit', $tag, '--draft=false')
+          Write-Host "已发布：$tag"

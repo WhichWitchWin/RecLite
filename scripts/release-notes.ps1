@@ -45,7 +45,7 @@ if ($body.Count -eq 0) { throw ('CHANGELOG.md 里 v{0} 这一节是空的' -f $v
 $text = ($body -join "`n") + "`n"
 
 if ($OutFile) {
-    Set-Content -Path $OutFile -Value $text -Encoding UTF8 -NoNewline
+    [System.IO.File]::WriteAllText($OutFile, $text, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "发布说明已写入：$OutFile"
 } else {
     Write-Output $text

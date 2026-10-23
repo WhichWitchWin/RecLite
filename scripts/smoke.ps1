@@ -4,10 +4,10 @@
 #       它会编译 → 在一个干净的临时目录里启动 → 录音 / 停止保存 / 存预录 / 试听
 #       → 检查运行日志里没有错误 → 收尾。
 #
-# 用法（位置：localdev\tools\smoke.ps1，在任意目录执行都可以）：
+# 用法（位置：scripts\smoke.ps1，在任意目录执行都可以）：
 #   .\smoke.ps1                  编译 Debug 版并验证
 #   .\smoke.ps1 -NoBuild         跳过编译，直接验证 out\RecLite.exe
-#   .\smoke.ps1 -Keep            把录音产物与日志复制到 tools\smoke-artifacts
+#   .\smoke.ps1 -Keep            把录音产物与日志复制到 scripts\smoke-artifacts
 #
 # 为什么用 Debug：Release 会覆盖 out\ 里正在用的那份，冒烟失败时不好回退。
 # 想验证发布版就先用 .\build.ps1 出 Release，再跑 .\smoke.ps1 -NoBuild。
@@ -22,7 +22,7 @@ param(
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 
-# 本脚本位于 localdev\tools\smoke.ps1：往上一级就是 localdev 根
+# 本脚本位于 scripts\smoke.ps1：往上一级就是仓库根
 $tools = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root  = Split-Path -Parent $tools
 $out   = Join-Path $root "out"

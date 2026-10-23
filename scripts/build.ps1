@@ -1,6 +1,6 @@
 ﻿# RecLite 构建脚本
 #
-# 用法（位置：localdev\tools\build.ps1，在任意目录执行都可以）：
+# 用法（位置：scripts\build.ps1，在任意目录执行都可以）：
 # 输出：out\RecLite.exe —— 本地测试和日常运行都用这一份，不再分 dist / release
 #
 #   .\build.ps1                          （默认 Release）
@@ -17,13 +17,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 本脚本位于 localdev\tools\build.ps1：往上一级就是 localdev 根
+# 本脚本位于 scripts\build.ps1：往上一级就是仓库根（src\ 与 out\ 都在这一级）
 $tools = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root  = Split-Path -Parent $tools
 $src   = Join-Path $root "src"
 $out   = Join-Path $root "out"
 
-if (-not (Test-Path (Join-Path $src "RecLite.csproj"))) { throw "没找到 src\RecLite.csproj，请确认目录结构是 localdev\src 与 localdev\tools" }
+if (-not (Test-Path (Join-Path $src "RecLite.csproj"))) { throw "没找到 src\RecLite.csproj，请确认脚本位于仓库的 scripts\ 目录下" }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw "没找到 dotnet 命令，请先安装 .NET SDK 8" }
 
 Write-Host "== 1/2 编译 ==" -ForegroundColor Cyan
