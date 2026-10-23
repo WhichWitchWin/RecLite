@@ -2,6 +2,11 @@
 
 # RecLite 轻录音
 
+[![CI](https://github.com/WhichWitchWin/RecLite/actions/workflows/ci.yml/badge.svg)](https://github.com/WhichWitchWin/RecLite/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/WhichWitchWin/RecLite?label=release)](https://github.com/WhichWitchWin/RecLite/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)](https://github.com/WhichWitchWin/RecLite/releases/latest)
+
 一个轻量的 Windows 录音工具：**单文件、绿色免安装、自带预录缓存**。
 专治老式录音软件的「设备识别」毛病。
 
@@ -64,7 +69,12 @@ RecLite 用的是 Windows 官方新接口 **WASAPI**：
 
 ## 下载使用
 
-`release/RecLite.exe` —— 就这一个文件，双击即用。
+[**⬇ 下载最新版 `RecLite.exe`**](https://github.com/WhichWitchWin/RecLite/releases/latest/download/RecLite.exe) —— 就这一个文件，双击即用。
+
+Release 页同时提供：
+
+- `RecLite-UserGuide-zh.txt` —— 中文详细操作说明（仓库里是 [`docs/user-guide-zh.txt`](docs/user-guide-zh.txt)）
+- `SHA256SUMS.txt` —— 下载后可用于校验文件是否完整
 
 系统要求：**Windows 10 1903+ / Windows 11**（系统自带 .NET Framework 4.8），
 不需要安装任何运行时。
@@ -84,37 +94,40 @@ RecLite 用的是 Windows 官方新接口 **WASAPI**：
 > `%TEMP%\WPF` —— WPF 框架自己的渲染临时目录。
 > 原生库没法从内存直接加载，这是单文件化的妥协。
 
-详细操作说明见 [`release/使用说明.txt`](release/使用说明.txt)。
-
 ---
 
 ## 从源码构建（可选）
 
-**普通用户不需要构建** —— `release/RecLite.exe` 已随仓库提供，下载直接用。
+**普通用户不需要构建** —— 直接从 [Releases](https://github.com/WhichWitchWin/RecLite/releases/latest) 页下载成品即可。
 
-想自己编译的话：
+想自己编译的话（需要 Windows 与 .NET SDK 8）：
 
 ```powershell
-dotnet build -c Release src/RecLite.csproj
+dotnet build -c Release src/RecLite.csproj   # 产物 src\bin\Release\RecLite.exe
+.\scripts\build.ps1                          # 或者用它，产物固定到 out\RecLite.exe
 ```
-
-产物在 `src/bin/Release/RecLite.exe`。要求 .NET SDK 8（用来编译 net48 目标）。
 
 产物是**单文件 exe**：所有托管依赖和原生 `sndfile.dll` 都已内嵌，
 运行时由 `src/Core/Bundled.cs` 解析（托管）或解包（原生），所以只需要复制这一个文件。
+
+冒烟与回归脚本：`scripts\smoke.ps1`（启动程序做界面自检）、`scripts\verify\`（按功能点划分的验证脚本）。
 
 ---
 
 ## 目录结构
 
 ```
-src/                源代码（.NET Framework 4.8 + WPF，x64）
-  Audio/            采集、编码、预录缓存、设备枚举
-  Core/             设置、日志、路径、内嵌程序集加载
-  UI/               波形、时间轴、电平表等自绘控件
-  lib/              sndfile.dll，以及打包时内嵌用的托管依赖
-  app.ico           程序图标（16~256 多尺寸）
-release/            发布产物（单文件 exe + 使用说明）
+.github/             CI、自动发版工作流、Issue / PR 模板
+docs/                用户文档（中文使用说明）
+licenses/            第三方组件许可证全文
+scripts/             构建（build.ps1）、冒烟与回归脚本
+src/                 源代码（.NET Framework 4.8 + WPF，x64）
+  Audio/             采集、编码、预录缓存、设备枚举
+  Core/              设置、日志、路径、内嵌程序集加载
+  UI/                波形、时间轴、电平表等自绘控件
+  lib/               sndfile.dll，以及打包时内嵌用的托管依赖
+  app.ico            程序图标（16~256 多尺寸）
+out/                 本地构建产物（不入库）
 ```
 
 ---
@@ -136,8 +149,8 @@ release/            发布产物（单文件 exe + 使用说明）
 | [NAudio](https://github.com/naudio/NAudio) 2.2.1 | WASAPI 采集与播放、MP3 编码 | MIT |
 | [libsndfile](https://github.com/libsndfile/libsndfile) 1.2.2 | 文件解码（FLAC / OGG / AIFF 等） | LGPL-2.1 |
 
-两者均以二进制形式随本项目分发（内嵌在 `RecLite.exe` 中）。
-如果需要再分发，请自行附上对应的许可证全文。
+两者均以二进制形式内嵌在 `RecLite.exe` 中。许可证全文在 [`licenses/`](licenses/)，
+合规说明（含 LGPL 要求的「可替换库」做法）见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 ---
 
@@ -145,6 +158,7 @@ release/            发布产物（单文件 exe + 使用说明）
 
 本项目使用 [MIT 许可证](LICENSE)。
 
-第三方组件另有各自许可证：NAudio 为 MIT，libsndfile 为 LGPL-2.1（详见上表）。
-再分发 `release/RecLite.exe` 时请一并附上这些许可证全文。
+第三方组件另有各自许可证：NAudio 为 MIT，libsndfile 为 LGPL-2.1
+（全文在 [`licenses/`](licenses/)，合规说明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)）。
 
+想参与改进见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私密报告，不要开公开 Issue。

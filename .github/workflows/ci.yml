@@ -25,21 +25,26 @@ jobs:
       - name: 编译 Release
         run: dotnet build src/RecLite.csproj -c Release --nologo
 
-      - name: 确认产物是单文件
+      - name: 校验产物自足（解码库与托管依赖已内嵌）
         shell: pwsh
         run: |
-          $dir = 'src/bin/Release'
-          $extra = Get-ChildItem $dir -File | Where-Object { $_.Name -notin @('RecLite.exe', 'RecLite.pdb') }
-          if ($extra) {
-            Write-Host "::error::产物目录里出现了多余文件（单文件化失效）：$($extra.Name -join ', ')"
+          $exe = 'src/bin/Release/RecLite.exe'
+          if (-not (Test-Path $exe)) { Write-Host "::error::没找到 $exe"; exit 1 }
+          $size = (Get-Item $exe).Length
+          Write-Host ("RecLite.exe {0:N2} MB" -f ($size / 1MB))
+          if ($size -lt 2MB) {
+            Write-Host "::error::产物偏小，内嵌资源可能缺失"
             exit 1
           }
-          $exe = Get-Item "$dir/RecLite.exe"
-          Write-Host ("RecLite.exe {0:N2} MB" -f ($exe.Length / 1MB))
-          if ($exe.Length -lt 2MB) {
-            Write-Host "::error::产物偏小，可能内嵌资源缺失"
-            exit 1
+          $asm = [System.Reflection.Assembly]::LoadFile((Resolve-Path $exe).Path)
+          $res = $asm.GetManifestResourceNames()
+          foreach ($need in @('Bundled.sndfile.dll', 'Bundled.NAudio.dll')) {
+            if ($res -notcontains $need) {
+              Write-Host "::error::缺少内嵌资源 $need，单文件版会在运行时加载失败"
+              exit 1
+            }
           }
+          Write-Host ("内嵌资源 {0} 项，含 sndfile.dll 与 NAudio.dll" -f $res.Count)
 
       - name: 上传产物
         uses: actions/upload-artifact@v4

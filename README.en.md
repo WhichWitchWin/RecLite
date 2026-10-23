@@ -2,6 +2,11 @@
 
 # RecLite
 
+[![CI](https://github.com/WhichWitchWin/RecLite/actions/workflows/ci.yml/badge.svg)](https://github.com/WhichWitchWin/RecLite/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/WhichWitchWin/RecLite?label=release)](https://github.com/WhichWitchWin/RecLite/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)](https://github.com/WhichWitchWin/RecLite/releases/latest)
+
 A lightweight Windows audio recorder: **single-file, portable, with a built-in pre-roll buffer.**
 Built to fix the "device detection" headaches of older recording software.
 
@@ -62,7 +67,12 @@ It keeps the most recent stretch of audio buffered in the background. When you p
 
 ## Download
 
-`release/RecLite.exe` — a single file, just double-click it.
+[**⬇ Download the latest `RecLite.exe`**](https://github.com/WhichWitchWin/RecLite/releases/latest/download/RecLite.exe) — a single file, just double-click it.
+
+The release page also carries:
+
+- `RecLite-UserGuide-zh.txt` — the detailed Chinese user guide (source: [`docs/user-guide-zh.txt`](docs/user-guide-zh.txt))
+- `SHA256SUMS.txt` — checksums to verify the download
 
 Requirements: **Windows 10 1903+ / Windows 11** (.NET Framework 4.8 ships with the OS).
 Nothing else needs to be installed.
@@ -82,37 +92,40 @@ Portable by design:
 > `%TEMP%\WPF` — WPF's own rendering temp folder.
 > Native libraries cannot be loaded straight from memory, so this is the price of shipping a single file.
 
-Detailed instructions (Chinese) are in [`release/使用说明.txt`](release/使用说明.txt).
-
 ---
 
 ## Building from source (optional)
 
-**Regular users do not need to build anything** — `release/RecLite.exe` ships with the repository.
+**Regular users do not need to build anything** — grab the binary from [Releases](https://github.com/WhichWitchWin/RecLite/releases/latest).
 
-If you want to compile it yourself:
+If you want to compile it yourself (needs Windows and .NET SDK 8):
 
 ```powershell
-dotnet build -c Release src/RecLite.csproj
+dotnet build -c Release src/RecLite.csproj   # output: src\bin\Release\RecLite.exe
+.\scripts\build.ps1                          # or this, which always writes out\RecLite.exe
 ```
-
-The output is `src/bin/Release/RecLite.exe`. Requires .NET SDK 8 (to target net48).
 
 The result is a **single-file exe**: all managed dependencies and the native `sndfile.dll` are embedded,
 resolved at runtime by `src/Core/Bundled.cs` (managed) or unpacked (native) — so only that one file needs copying.
+
+Smoke and regression scripts: `scripts\smoke.ps1` (launches the app and checks the UI) and `scripts\verify\`.
 
 ---
 
 ## Layout
 
 ```
+.github/            CI, automated release workflow, issue / PR templates
+docs/               User documentation (Chinese user guide)
+licenses/           Full texts of third-party licenses
+scripts/            Build (build.ps1), smoke and regression scripts
 src/                Source (.NET Framework 4.8 + WPF, x64)
   Audio/            Capture, encoding, pre-roll buffer, device enumeration
   Core/             Settings, logging, paths, embedded assembly loading
   UI/               Custom-drawn controls: waveform, timeline, level meters
   lib/              sndfile.dll plus the managed dependencies used for embedding
   app.ico           Application icon (16–256, multiple sizes)
-release/            Release artifacts (single-file exe + user guide)
+out/                Local build output (not committed)
 ```
 
 ---
@@ -134,8 +147,9 @@ release/            Release artifacts (single-file exe + user guide)
 | [NAudio](https://github.com/naudio/NAudio) 2.2.1 | WASAPI capture and playback, MP3 encoding | MIT |
 | [libsndfile](https://github.com/libsndfile/libsndfile) 1.2.2 | File decoding (FLAC / OGG / AIFF, etc.) | LGPL-2.1 |
 
-Both are distributed with this project in binary form (embedded inside `RecLite.exe`).
-Include the corresponding license texts if you redistribute them.
+Both are embedded in binary form inside `RecLite.exe`. Full license texts are in [`licenses/`](licenses/);
+see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the compliance details (including the LGPL
+requirement that the library stay replaceable).
 
 ---
 
@@ -143,5 +157,8 @@ Include the corresponding license texts if you redistribute them.
 
 This project is released under the [MIT License](LICENSE).
 
-Third-party components carry their own licenses: NAudio is MIT, libsndfile is LGPL-2.1 (see the table above).
-Include those license texts when redistributing `release/RecLite.exe`.
+Third-party components carry their own licenses: NAudio is MIT, libsndfile is LGPL-2.1
+(full texts in [`licenses/`](licenses/), compliance notes in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For security issues, follow
+[SECURITY.md](SECURITY.md) instead of opening a public issue.

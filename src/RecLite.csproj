@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>RecLite</AssemblyName>
     <RootNamespace>RecLite</RootNamespace>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Product>RecLite 轻录音</Product>
     <!-- 明确编译为 64 位：32 位进程访问 shell 部分接口会被 WOW64/UIPI 拒绝（E_ACCESSDENIED 0x80070005） -->
     <PlatformTarget>x64</PlatformTarget>

@@ -1,6 +1,14 @@
-# 更新说明
+# 更新日志
 
 只记录对使用者有意义的变化，最新版本在最上面。
+
+## v0.2.2 — 发布渠道改为自动化构建
+
+### 变更
+
+- 发布产物改由 GitHub Actions 自动构建并发布，下载统一走 [Releases](https://github.com/WhichWitchWin/RecLite/releases/latest)，不再在仓库里存 exe
+- Release 附件新增 `SHA256SUMS.txt`，可校验下载是否完整
+- 中文使用说明移到 `docs/user-guide-zh.txt`（Release 附件名不变，仍是 `RecLite-UserGuide-zh.txt`）
 
 ## v0.2.1 — 修复 24 位录音裁不掉预录
 
