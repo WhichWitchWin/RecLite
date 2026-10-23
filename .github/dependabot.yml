@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # 保持 GitHub Actions 版本不落伍（工作流里用的 checkout / setup-dotnet / upload-artifact）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

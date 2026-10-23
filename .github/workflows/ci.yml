@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: 编译检查（net48 / x64）
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 编译 Release
+        run: dotnet build src/RecLite.csproj -c Release --nologo
+
+      - name: 确认产物是单文件
+        shell: pwsh
+        run: |
+          $dir = 'src/bin/Release'
+          $extra = Get-ChildItem $dir -File | Where-Object { $_.Name -notin @('RecLite.exe', 'RecLite.pdb') }
+          if ($extra) {
+            Write-Host "::error::产物目录里出现了多余文件（单文件化失效）：$($extra.Name -join ', ')"
+            exit 1
+          }
+          $exe = Get-Item "$dir/RecLite.exe"
+          Write-Host ("RecLite.exe {0:N2} MB" -f ($exe.Length / 1MB))
+          if ($exe.Length -lt 2MB) {
+            Write-Host "::error::产物偏小，可能内嵌资源缺失"
+            exit 1
+          }
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: RecLite-exe
+          path: src/bin/Release/RecLite.exe
+          if-no-files-found: error

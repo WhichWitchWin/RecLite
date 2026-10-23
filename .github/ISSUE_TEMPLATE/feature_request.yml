@@ -1,0 +1,32 @@
+name: 功能建议
+description: 希望 RecLite 支持什么
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RecLite 的定位是**轻量、单文件、绿色**的录音工具，明显增加体积或依赖的建议大概率不会被采纳。
+        提之前可以先看看 README 的「已知限制」。
+
+  - type: textarea
+    id: need
+    attributes:
+      label: 你想要什么
+      description: 用一句话说清希望程序做到什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: scene
+    attributes:
+      label: 使用场景
+      description: 你实际录音时遇到了什么，现在的做法是什么、哪里难受
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternative
+    attributes:
+      label: 你试过的替代方案（可选）
+      description: 别的软件怎么解决这件事，或者你临时怎么绕过

@@ -1,0 +1,75 @@
+name: Release
+
+# 推一个 v* 标签即自动：编译 → 组附件 → 建 Release
+# 手动补发：在 Actions 页面点 Run workflow，填版本号（不带 v）
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不带 v，例如 0.2.2）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 构建并发布
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET SDK 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 解析版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $raw = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ github.event.inputs.version }}' } else { '${{ github.ref_name }}' }
+          $v = $raw.Trim() -replace '^v', ''
+          if ($v -notmatch '^\d+\.\d+\.\d+') { Write-Host "::error::版本号格式不对：$raw"; exit 1 }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "版本：$v"
+
+      - name: 编译
+        run: dotnet build src/RecLite.csproj -c Release --nologo -p:Version=${{ steps.ver.outputs.version }}
+
+      - name: 组附件与校验值
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist -Force | Out-Null
+          Copy-Item src/bin/Release/RecLite.exe dist/RecLite.exe
+          Copy-Item docs/user-guide-zh.txt dist/RecLite-UserGuide-zh.txt
+          $sums = foreach ($f in @('dist/RecLite.exe', 'dist/RecLite-UserGuide-zh.txt')) {
+            $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+            '{0}  {1}' -f $h, (Split-Path $f -Leaf)
+          }
+          Set-Content -Path dist/SHA256SUMS.txt -Value $sums -Encoding ASCII
+          Get-ChildItem dist | Format-Table Name, Length -AutoSize
+
+      - name: 生成发布说明
+        shell: pwsh
+        run: ./scripts/release-notes.ps1 -Version ${{ steps.ver.outputs.version }} -OutFile release-notes.md
+
+      - name: 发布
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v${{ steps.ver.outputs.version }}'
+          $title = 'RecLite v${{ steps.ver.outputs.version }}'
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+            gh release upload $tag dist/RecLite.exe dist/RecLite-UserGuide-zh.txt dist/SHA256SUMS.txt --clobber
+            gh release edit $tag --title $title --notes-file release-notes.md
+          } else {
+            gh release create $tag dist/RecLite.exe dist/RecLite-UserGuide-zh.txt dist/SHA256SUMS.txt --title $title --notes-file release-notes.md
+          }

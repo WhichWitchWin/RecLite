@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私密报告）
+    url: https://github.com/WhichWitchWin/RecLite/security/advisories/new
+    about: 请勿在公开 Issue 里披露漏洞细节，用这个私密渠道
+  - name: 使用问题
+    url: https://github.com/WhichWitchWin/RecLite/blob/main/docs/user-guide-zh.txt
+    about: 先看中文使用说明，多数操作问题里面都有答案
