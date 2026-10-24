@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-25
+
+启动更快，并把启动各段耗时写进日志。
+
 ### 变更
 
 - 启动更快：先把窗口显示出来，再枚举设备、打开采集通道；这段短暂期间状态栏显示「正在连接设备…」，两个设备下拉框与「● 开始录音」暂不可点，连好后自动恢复
@@ -86,7 +90,8 @@
 
 - 不支持 M4A / AAC / WMA 解码
 
-[Unreleased]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/WhichWitchWin/RecLite/compare/v0.1.0...v0.2.0
