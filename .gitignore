@@ -19,5 +19,6 @@ smoke-artifacts/
 # 保险：万一根目录出现 backups\ 也不入库
 backups/
 
-# 文档：仅供作者开发时记录使用，实际对外更新以同步到CHANGELOG.md
-docs/
+# 文档：docs/ 默认不进版本管理（漏写也不会被推出去）；要纳入的必须在这里显式放行
+docs/*
+!docs/user-guide-zh.txt
