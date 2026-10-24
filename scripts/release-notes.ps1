@@ -24,17 +24,17 @@ if (-not (Test-Path $changelog)) { throw "没找到 CHANGELOG.md：$changelog" }
 
 $version = $Version -replace '^v', ''
 $lines = Get-Content $changelog -Encoding UTF8
-$pattern = '^##\s+v?' + [regex]::Escape($version) + '(?=\s|$)'
+$pattern = '^##\s+\[?v?' + [regex]::Escape($version) + '\]?(?=\s|$)'
 
 $startIdx = -1
 for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match $pattern) { $startIdx = $i; break }
 }
-if ($startIdx -lt 0) { throw ('CHANGELOG.md 里找不到 "## v{0}" 这一节' -f $version) }
+if ($startIdx -lt 0) { throw ('CHANGELOG.md 里找不到「## [{0}]」这一节' -f $version) }
 
 $body = New-Object System.Collections.Generic.List[string]
 for ($i = $startIdx + 1; $i -lt $lines.Count; $i++) {
-    if ($lines[$i] -match '^##\s') { break }
+    if ($lines[$i] -match '^##\s' -or $lines[$i] -match '^\[[^\]]+\]:') { break }
     $body.Add($lines[$i])
 }
 
