@@ -28,7 +28,34 @@ namespace RecLite
         /// </summary>
         static App()
         {
+            // 计量与 JIT 预热都要尽可能早 —— 晚一步就少测一段、少热一段。
+            StartupTrace.Begin();
+            EnableJitProfile();
             Bundled.Install();
+        }
+
+        /// <summary>
+        /// 让 .NET 把上次启动 JIT 出来的机器码缓存下来，下次启动少编译一遍。
+        /// 只对第 2 次及以后的启动有效（第一次还没有缓存可读）。
+        ///
+        /// 必须在这里调用：ProfileOptimization 要在大部分 JIT 发生之前启动才有效。
+        /// profile 存 %TEMP%\RecLite\profile —— 不能放程序目录，
+        /// 否则破坏「删掉文件夹即卸载干净」的绿色版承诺。
+        /// </summary>
+        private static void EnableJitProfile()
+        {
+            try
+            {
+                var dir = Path.Combine(Path.GetTempPath(), "RecLite", "profile");
+                Directory.CreateDirectory(dir);
+                System.Runtime.ProfileOptimization.SetProfileRoot(dir);
+                System.Runtime.ProfileOptimization.StartProfile("startup.profile");
+            }
+            catch (Exception ex)
+            {
+                // 预热只是提速手段，失败就静默跳过，绝不拦着程序启动
+                try { Log.Error("ProfileOptimization", ex); } catch { }
+            }
         }
 
         protected override void OnStartup(StartupEventArgs e)

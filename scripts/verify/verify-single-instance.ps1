@@ -47,10 +47,14 @@ try {
     $log = Join-Path $run 'RecLite.log'
     $text = ''
     if (Test-Path $log) { $text = [System.IO.File]::ReadAllText($log, [System.Text.Encoding]::UTF8) }
+    # 断言文案必须与程序实际写的一致：v0.2.0 起程序输出的是
+    # 「恢复窗口（托盘图标或第二次启动）」，原来这里 grep 的「从托盘恢复窗口」
+    # 在源码里根本不存在，导致这个测试从 v0.2.0 起一直误报 FAIL。
+    $restoredLog = ($text -match '恢复窗口（托盘图标或第二次启动）')
     Write-Host ('log: requested restore  = ' + ($text -match '已请求它恢复窗口'))
-    Write-Host ('log: restored from tray = ' + ($text -match '从托盘恢复窗口'))
+    Write-Host ('log: restored from tray = ' + $restoredLog)
 
-    $ok = $bExited -and $visibleNow -and ($text -match '已请求它恢复窗口') -and ($text -match '从托盘恢复窗口')
+    $ok = $bExited -and $visibleNow -and ($text -match '已请求它恢复窗口') -and $restoredLog
     Write-Host ('RESULT: ' + $(if ($ok) { 'PASS - second launch restored the hidden window' } else { 'FAIL' }))
 }
 finally {

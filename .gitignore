@@ -13,11 +13,11 @@ settings.json
 *.log
 *.log.*
 
-# 本地专用目录（不上传）：放临时调试产物、个人备份快照
-local/
-
 # 冒烟脚本 -Keep 时的产物（录音、日志）
 smoke-artifacts/
 
 # 保险：万一根目录出现 backups\ 也不入库
 backups/
+
+# 文档：仅供作者开发时记录使用，实际对外更新以同步到CHANGELOG.md
+docs/

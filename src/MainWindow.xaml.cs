@@ -37,6 +37,18 @@ namespace RecLite
         private string _tempWav;
         private string _tempDir;
         private bool _suspendEvents;
+
+        /// <summary>命令行 --play 指定的文件。只记路径，等设备就绪之后再真正播放。</summary>
+        private string _startupPlayPath;
+
+        /// <summary>窗口正在关闭：延后期里看到它就直接放弃后续动作，避免对已释放的引擎动手。</summary>
+        private bool _closing;
+
+        /// <summary>延后期是否已经跑过（防重复进入）。</summary>
+        private bool _deferredDone;
+
+        /// <summary>延后期结束的时间戳：卡顿日志是在阻塞结束、渲染恢复时才写的，必须按「间隔起点」判断。</summary>
+        private long _deferredEndTicks;
         // 用户是否手动改过设备。
         // 没改过就一直跟随系统默认设备，绝不把设备 ID 写死进配置 ——
         // 否则换机器 / 换声卡 / 改了系统默认设备之后，程序还死记着旧的那个。
@@ -83,19 +95,16 @@ namespace RecLite
         {
             InitializeComponent();
 
-            // 命令行 --play <file>：启动后自动加载并播放，方便自动化回归测试
-            Loaded += (s, e) =>
+            // 命令行 --play <file>：启动后自动加载并播放，方便自动化回归测试。
+            // 只记下路径 —— 设备还没打开就播放必然失败，真正的播放交给 RunDeferredStartup 收尾。
+            try
             {
-                try
-                {
-                    var a = Environment.GetCommandLineArgs();
-                    int i = Array.IndexOf(a, "--play");
-                    if (i >= 0 && i + 1 < a.Length && File.Exists(a[i + 1]))
-                        Dispatcher.BeginInvoke(new Action(() => PlayFile(a[i + 1])),
-                            System.Windows.Threading.DispatcherPriority.Background);
-                }
-                catch { }
-            };
+                var a = Environment.GetCommandLineArgs();
+                int i = Array.IndexOf(a, "--play");
+                if (i >= 0 && i + 1 < a.Length && File.Exists(a[i + 1]))
+                    _startupPlayPath = a[i + 1];
+            }
+            catch { }
 
             // 托盘：等窗口真正显示之后再放图标。
             // 构造函数阶段 Application 的消息泵还没真正跑起来，Shell_NotifyIcon 有可能直接失败，
@@ -181,11 +190,25 @@ namespace RecLite
             _engine = new RecordingEngine();
             _engine.Error += msg => Dispatcher.BeginInvoke(new Action(() => SetStatus("⚠ " + msg)));
 
-            CleanupStaleTemp();
-
             BuildOptionLists();
-            LoadDevices();
-            ApplySettingsToUi();
+            ApplyNonDeviceSettings();
+
+            // 设备相关的初始化要等窗口可见之后再做（A 方案：先开门、后背菜）：
+            // 扫残留临时文件 + 枚举所有设备 + 打开采集设备，这三件活要吃掉 100~200 ms，
+            // 却都不是「把窗口画出来」所必需的。
+            //
+            // 「正在连接设备…」与临时置灰必须在这里（Show 之前）设好 —— 它们要出现在第一帧上，
+            // 用户才知道程序在忙。等延后期里再设就晚了：状态改动与重活挤在同一个时间片里，WPF 来不及重绘。
+            EnterConnectingUiState();
+
+            // ContentRendered 而不是 Loaded：Loaded 在第一帧画出来之前就会触发，等于没挪。
+            // 优先级用 Normal 而不是 Background：本仓库踩过「Background 被 Render 长期饿死」的坑
+            // （见 OnRendering 上方的注释）；此时首帧已经渲染完成，不需要再给渲染让路。
+            ContentRendered += (s, e) =>
+            {
+                StartupTrace.MarkWindowVisible();
+                Dispatcher.BeginInvoke(new Action(RunDeferredStartup), DispatcherPriority.Normal);
+            };
 
             // 60fps：WPF 渲染被 vsync 锁在 60Hz，更高频率只会空转（实测 180fps 设定仍跑 ~64fps）
             //
@@ -206,11 +229,17 @@ namespace RecLite
 
             Closed += (s, e) =>
             {
+                // 立在最前面：延后期可能还排在队列里（用户在设备就绪前就关窗），
+                // 它一看到这个标志就放弃 —— 否则会去 StartDevice 一台已经被 Dispose 的引擎。
+                _closing = true;
                 try { CompositionTarget.Rendering -= OnRendering; } catch { }
                 try { SaveSettingsFromUi(); } catch { }   // 退出时保存全部设置
                 StopPlayback();
                 try { _engine.Dispose(); } catch { }
                 if (_tempWav != null && File.Exists(_tempWav)) { try { File.Delete(_tempWav); } catch { } }
+                // 关得比设备就绪还快的那次，延后期不会 Flush —— 这里补一次，
+                // Flush 自带幂等守卫，重复调用不会多写一行。
+                StartupTrace.Flush();
                 Log.Write("=== RecLite 退出 ===");
             };
         }
@@ -251,8 +280,13 @@ namespace RecLite
             if (rawDelta > _maxDeltaTicks && now - _lastStutterLogTicks > System.Diagnostics.Stopwatch.Frequency * 2)
             {
                 _lastStutterLogTicks = now;
-                Log.Write(string.Format("[卡顿] 帧间隔 {0:0} ms",
-                    rawDelta * 1000.0 / System.Diagnostics.Stopwatch.Frequency));
+                // 启动期的这些大间隔是「先出窗后连设备」的必然产物，不标注的话，
+                // 以后排查真实卡顿会被每次启动自带的这一条误导。
+                string note = "";
+                if (_deferredEndTicks == 0) note = "（启动期，预期内）";
+                else if ((now - rawDelta) <= _deferredEndTicks) note = "（延后期，预期内）";
+                Log.Write(string.Format("[卡顿] 帧间隔 {0:0} ms{1}",
+                    rawDelta * 1000.0 / System.Diagnostics.Stopwatch.Frequency, note));
             }
 
         }
@@ -456,7 +490,11 @@ namespace RecLite
             finally { _suspendEvents = false; }
         }
 
-        private void ApplySettingsToUi()
+        /// <summary>
+        /// 不依赖设备列表的那部分设置。构造期就要生效 —— 用户第一眼看到的
+        /// 采样率 / 格式 / 目录 / 音量都来自这里，不能等设备枚举完才算数。
+        /// </summary>
+        private void ApplyNonDeviceSettings()
         {
             _suspendEvents = true;
             try
@@ -491,6 +529,19 @@ namespace RecLite
                 if (Waveform != null) Waveform.UseLogScale = _settings.WaveLogScale;
                 UpdateScaleBtn();
 
+            }
+            finally { _suspendEvents = false; }
+        }
+
+        /// <summary>
+        /// 选哪个设备。依赖 LoadDevices() 填好的 _sources / _playbacks，
+        /// 所以只能在设备枚举之后跑（A 方案的延后期）。
+        /// </summary>
+        private void ApplyDeviceSelection()
+        {
+            _suspendEvents = true;
+            try
+            {
                 // 设备
                 if (!string.IsNullOrEmpty(_settings.CaptureDeviceId))
                     CaptureCombo.SelectedItem = _sources.FirstOrDefault(x => x.Id == _settings.CaptureDeviceId);
@@ -525,8 +576,83 @@ namespace RecLite
                     PlaybackCombo.SelectedItem = _playbacks.FirstOrDefault();
             }
             finally { _suspendEvents = false; }
+        }
 
-            OpenSelectedDevice();
+        /// <summary>
+        /// 设备初始化前的临时状态：状态栏提示 + 三个控件禁用 + 面板调暗。
+        /// 调暗值（0.4）与 SetRecordingUi 的「不可用」取值保持一致 —— 暗色主题下光靠 IsEnabled
+        /// 肉眼看不出差别，用户会去点一个「看起来还能用」的控件。
+        /// 单独成方法，是因为它必须在 Show 之前调用（否则来不及画上第一帧）。
+        /// </summary>
+        private void EnterConnectingUiState()
+        {
+            SetStatus("正在连接设备…");
+            CaptureCombo.IsEnabled = false;
+            PlaybackCombo.IsEnabled = false;
+            RecordBtn.IsEnabled = false;
+            if (CapturePanel != null) CapturePanel.Opacity = 0.4;
+        }
+
+        /// <summary>
+        /// 窗口已经可见之后才做的初始化（A 方案：先开门、后背菜）。
+        ///
+        /// 这一段里的三件活都不是「把窗口画出来」所必需的，却要吃掉 100~200 ms：
+        /// 扫录音目录的残留临时文件、枚举所有设备、打开采集设备并启动预录缓存。
+        /// 放在 Show() 之前，就等于让用户对着空气等。
+        /// </summary>
+        private async void RunDeferredStartup()
+        {
+            bool opened = false;
+            try
+            {
+                if (_deferredDone || _closing) return;
+                _deferredDone = true;
+
+                // 关键的一步：把控制权交还给渲染，让「正在连接设备…」与置灰真正画上屏，
+                // 再开始干重活。少了这一步，状态改动与阻塞操作挤在同一个时间片里，
+                // 用户看到的是「窗口出来了、完全不响应、也没有任何文字解释」。
+                await Dispatcher.Yield(DispatcherPriority.Render);
+                if (_closing) return;
+
+                try { CleanupStaleTemp(); }
+                catch (Exception ex) { Log.Error("CleanupStaleTemp", ex); }
+
+                LoadDevices();
+                ApplyDeviceSelection();
+                OpenSelectedDevice();
+                opened = true;
+            }
+            catch (Exception ex)
+            {
+                // 延后期炸了，不能让界面永远停在「正在连接设备…」
+                Log.Error("DeferredStartup", ex);
+                SetStatus("⚠ 设备初始化失败：" + ex.Message);
+            }
+            finally
+            {
+                if (!_closing)
+                {
+                    // 恢复可用状态。这里刻意与改造前保持一致：设备打不开时点录音会给出提示，
+                    // 而不是无声无息地按不动 —— 只为提速而改变失败路径，回归面不值当。
+                    CaptureCombo.IsEnabled = true;
+                    PlaybackCombo.IsEnabled = true;
+                    RecordBtn.IsEnabled = true;
+                    if (CapturePanel != null) CapturePanel.Opacity = 1.0;
+                }
+
+                StartupTrace.MarkDeviceReady();
+                StartupTrace.Flush();
+                _deferredEndTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                // 只在设备真的打开之后才试听：失败时状态栏刚写了红字原因，播放会把它盖掉。
+                if (opened && _startupPlayPath != null && !_closing)
+                {
+                    string path = _startupPlayPath;
+                    _startupPlayPath = null;
+                    try { PlayFile(path); }
+                    catch (Exception ex) { Log.Error("--play", ex); }
+                }
+            }
         }
 
         // ==================== 设备 ====================

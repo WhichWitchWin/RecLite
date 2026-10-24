@@ -17,6 +17,26 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v7
 
+      - name: 检查脚本编码（.ps1 必须 UTF-8 with BOM）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # PowerShell 5.1 见到无 BOM 的 UTF-8 会按 ANSI(cp936) 读，中文注释与字符串全乱，
+          # 严重时直接语法错误。这条检查防的就是「编辑器工具把 BOM 顺手抹掉」。
+          $bad = @()
+          Get-ChildItem -Recurse -Filter *.ps1 -File |
+            Where-Object { $_.FullName -notmatch '\\\.git\\|\\bin\\|\\obj\\' } |
+            ForEach-Object {
+              $b = [System.IO.File]::ReadAllBytes($_.FullName)
+              $isUtf8Bom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)
+              if (-not $isUtf8Bom) { $bad += $_.FullName }
+            }
+          if ($bad.Count -gt 0) {
+            $bad | ForEach-Object { Write-Host "::error::.ps1 必须存成 UTF-8 with BOM（PowerShell 5.1 下无 BOM 会乱码）：$_" }
+            exit 1
+          }
+          Write-Host "全部 .ps1 均为 UTF-8 with BOM ✅"
+
       - name: 安装 .NET SDK 8
         uses: actions/setup-dotnet@v6
         with:

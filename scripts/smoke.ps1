@@ -108,9 +108,16 @@ try {
 
     $cap = WaitId 'CaptureCombo' 15
     if (-not $cap) { throw "15 秒内没出现录制通道下拉框" }
+    # 设备是「窗口可见之后」才枚举的（启动提速的延后期），慢机器上可能先拿到空下拉框，
+    # 所以这里最多重试 10 秒，而不是拿一次空值就判失败。
     $sel = $cap.GetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern)
-    $capName = ($sel.Current.GetSelection() | ForEach-Object { $_.Current.Name }) -join ","
-    if ([string]::IsNullOrWhiteSpace($capName)) { throw "录制通道为空，无法继续" }
+    $capName = ''
+    $deadline = (Get-Date).AddSeconds(10)
+    while ([string]::IsNullOrWhiteSpace($capName) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+        try { $capName = ($sel.Current.GetSelection() | ForEach-Object { $_.Current.Name }) -join "," } catch { }
+    }
+    if ([string]::IsNullOrWhiteSpace($capName)) { throw "10 秒内录制通道一直是空的（设备可能没连上）" }
     OK "录制通道 = $capName"
 
     # ---------------------------------------------------------------- 3 等预录缓存填充

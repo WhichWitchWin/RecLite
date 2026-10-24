@@ -16,3 +16,8 @@ updates:
     open-pull-requests-limit: 2
     commit-message:
       prefix: "chore"
+    # NAudio 以二进制内嵌在 exe 里（src/lib/bundled/，10 个 dll），升级必须同步换 dll
+    # 并跑真声卡冒烟，不适合由机器人按月提醒，等出现安全公告时再升。
+    # 注意：安全更新（Dependabot security updates）不受这里的 ignore 影响，会照常另开 PR。
+    ignore:
+      - dependency-name: "NAudio"

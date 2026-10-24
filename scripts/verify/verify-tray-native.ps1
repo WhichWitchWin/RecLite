@@ -1,5 +1,9 @@
 ﻿# 托盘图标「真的进了通知区」验证脚本
-# 判据只有一个：Shell_NotifyIconGetRect 返回 hr == 0。
+# 判据有两条，且必须同时成立：
+#   ① 程序日志里有「托盘图标已登记（NIM_ADD 成功」；
+#   ② 独立向 Shell 反查 GetRect 返回 hr == 0。
+# 本机 GetRect 已知假阴性（见项目档案），所以在这台机器上很可能只出 INCONCLUSIVE ——
+# 那表示「日志证据成立、缺独立反查」，不是功能回归。
 # 注意：NotifyIcon 用 uID = 0、guidItem 全零登记（不是 1，也不是 GUID）。
 # 本脚本必须用 UTF-8 with BOM 保存，否则 PowerShell 5.1 会把中文读成乱码。
 
@@ -80,8 +84,11 @@ try {
     $log = Join-Path $run 'RecLite.log'
     $text = ''
     if (Test-Path $log) { $text = [System.IO.File]::ReadAllText($log, [System.Text.Encoding]::UTF8) }
-    $logOk  = $text -match 'Shell 反查 GetRect hr=0 确认'
-    $logBad = $text -match '未能确认：GetRect hr='
+    # 断言文案必须与程序实际写的一致：v0.2.0 换托盘实现后，程序输出的是
+    # 「托盘图标已登记（NIM_ADD 成功；…）」与「托盘图标登记失败（NIM_ADD 未成功；…）」。
+    # 原来这里 grep 的两句在源码里根本不存在，导致本脚本永远只能吐 INCONCLUSIVE。
+    $logOk  = $text -match '托盘图标已登记（NIM_ADD 成功'
+    $logBad = $text -match '托盘图标登记失败（NIM_ADD 未成功'
     Write-Host ('log  : 自报已确认 = ' + $logOk + ' ; 自报未确认 = ' + $logBad)
     ($text -split "`r?`n") | Where-Object { $_ -match '托盘|Tray|GetRect' } | ForEach-Object { '  ' + $_ }
 

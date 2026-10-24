@@ -42,7 +42,21 @@ while ($body.Count -gt 0 -and $body[0].Trim() -eq '') { $body.RemoveAt(0) }
 while ($body.Count -gt 0 -and $body[$body.Count - 1].Trim() -eq '') { $body.RemoveAt($body.Count - 1) }
 if ($body.Count -eq 0) { throw ('CHANGELOG.md 里 v{0} 这一节是空的' -f $version) }
 
-$text = ($body -join "`n") + "`n"
+# 发版页的固定说明头：与 CHANGELOG 分开维护 —— CHANGELOG 只写「变了什么」，
+# 这段写「下载后怎么用」，两者互不侵占。
+$headerLines = @(
+    '单文件绿色版，下载下方的 `RecLite.exe` 双击即用；中文详细说明见附件 `RecLite-UserGuide-zh.txt`。'
+    ''
+    '- 系统要求：Windows 10 1903+ / Windows 11（系统自带 .NET Framework 4.8），无需安装任何运行时'
+    '- 首次运行若提示「Windows 已保护你的电脑」→ 点【更多信息】→【仍要运行】（未签名，属正常提示）'
+    '- 附件 `SHA256SUMS.txt` 可用于校验下载是否完整'
+    ''
+    '---'
+    ''
+)
+$header = ($headerLines -join "`n")
+
+$text = $header + "`n" + ($body -join "`n") + "`n"
 
 if ($OutFile) {
     [System.IO.File]::WriteAllText($OutFile, $text, (New-Object System.Text.UTF8Encoding($false)))
