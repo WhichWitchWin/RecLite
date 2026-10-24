@@ -44,6 +44,7 @@ dotnet build -c Release src/RecLite.csproj   # 产物 src\bin\Release\RecLite.ex
 
 `bin/`、`obj/`、`out/`、`dist/`、`Recordings/`、`settings.json`、`*.log`、`smoke-artifacts/`、以及任何个人环境的绝对路径。
 `.gitignore` 已经覆盖这些，别用 `-f` 强行加入。
+`docs/` 下除 `user-guide-zh.txt` 外的任何文件 —— 该目录默认不进版本管理，要入库得先改 `.gitignore`。
 
 ## 代码风格
 
@@ -52,32 +53,6 @@ dotnet build -c Release src/RecLite.csproj   # 产物 src\bin\Release\RecLite.ex
 - 目标框架固定 `net48`，只用 .NET Framework 4.8 可用的 API；平台固定 x64
 - 界面文案保持中文与现有语气一致
 - PowerShell 脚本必须存成 **UTF-8 with BOM**（PowerShell 5.1 无 BOM 会按 ANSI 读，中文全乱）
-
-## 发布新版本（维护者）
-
-发版只有三步，其余交给 CI：
-
-1. **升版本号**：改 `src/RecLite.csproj` 的 `<Version>`。它必须与 tag 一致，否则 Release 工作流会直接失败。
-2. **下沉更新日志**：把 `CHANGELOG.md` 顶部 `## [Unreleased]` 下的条目改成 `## [<版本>] - <YYYY-MM-DD>`。
-   分类固定六种（新增 / 变更 / 废弃 / 移除 / 修复 / 安全），格式遵循 Keep a Changelog 1.1.0 + 语义化版本 2.0.0。
-3. **打标签**：`git tag v<版本>` 然后 `git push origin v<版本>`。
-
-`.github/workflows/release.yml` 随后自动：编译 → 组附件（`RecLite.exe`、`RecLite-UserGuide-zh.txt`、`SHA256SUMS.txt`）→ 建**草稿** Release → 校验附件齐全且哈希与本次构建一致 → 转正。
-任何一步失败都会红，且草稿不会对外可见。
-
-**推 `main` 不等于发版**：推 `main` 只跑 `.github/workflows/ci.yml` 的检查（`.ps1` 必须 UTF-8 with BOM → 编译 →
-内嵌资源自足 → 裁剪矩阵 25 项），**不会打包发布**；出新包必须打标签。
-
-想预先看 Release 正文：`.\scripts\release-notes.ps1 -Version <版本>`。
-
-补发已有版本：Actions 页面 → Release → Run workflow，填版本号即可（会覆盖附件）。
-
-**两条维护者现场注意事项**：
-
-- `main` 的分支保护里「**禁强推**」对管理员也生效。确需强推（例如重写历史）要先到 Settings → Rules
-  临时打开 Allow force pushes，推完立刻关回去。
-- 内部文档与设计稿**不进本仓库**：`docs/` 在 `.gitignore` 里默认全禁，只有 `docs/user-guide-zh.txt` 被显式放行；
-  新文档要入库，必须在那里加一行 `!` 放行。
 
 ## 许可证
 
