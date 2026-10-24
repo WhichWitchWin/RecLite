@@ -1,8 +1,16 @@
 # 更新日志
 
-只记录对使用者有意义的变化，最新版本在最上面。
+记录 RecLite 对使用者有意义的变更，最新版本在最上面。
 
-## v0.2.2 — 发布渠道改为自动化构建
+格式依照 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/)。
+分类固定为六种：新增 / 变更 / 废弃 / 移除 / 修复 / 安全。
+
+## [Unreleased]
+
+## [0.2.2] - 2026-10-23
+
+发布渠道改为自动化构建。
 
 ### 变更
 
@@ -10,13 +18,17 @@
 - Release 附件新增 `SHA256SUMS.txt`，可校验下载是否完整
 - 中文使用说明移到 `docs/user-guide-zh.txt`（Release 附件名不变，仍是 `RecLite-UserGuide-zh.txt`）
 
-## v0.2.1 — 修复 24 位录音裁不掉预录
+## [0.2.1] - 2026-10-23
+
+修复 24 位录音裁不掉预录。
 
 ### 修复
 
 - 24 位录音（单声道 / 立体声）点「■ 停止（不含预录）」时无法裁掉开头预录，会提示「未能去掉预录」并按含预录保存；16 位与 32 位不受影响
 
-## v0.2.0 — 停止方式当场选 + 托盘常驻
+## [0.2.0] - 2026-10-22
+
+停止方式改成录音中当场选，并加入托盘常驻。
 
 ### 新增
 
@@ -36,7 +48,9 @@
 
 - 「保存时包含预录」复选框（功能由「■ 停止 / ■ 停止（不含预录）」承担）
 
-## v0.1.0 — 首次发布
+## [0.1.0] - 2026-10-21
+
+首次发布。
 
 ### 新增
 
@@ -65,3 +79,9 @@
 ### 移除
 
 - 不支持 M4A / AAC / WMA 解码
+
+[Unreleased]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/WhichWitchWin/RecLite/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/WhichWitchWin/RecLite/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/WhichWitchWin/RecLite/releases/tag/v0.1.0
